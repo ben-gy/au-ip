@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://au-ip.benrichardson.dev/sitemap.xml
