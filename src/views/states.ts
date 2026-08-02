@@ -36,7 +36,7 @@ function trendChart(states: StateRow[]): string {
   const iw = W - M.l - M.r;
   const ih = H - M.t - M.b;
   const Y0 = 1990;
-  const Y1 = 2025;
+  const Y1 = Math.max(Y0 + 1, ...states.flatMap((s) => s.series.map((r) => r[0])));
   const max = Math.max(1, ...states.flatMap((s) => s.series.filter(([y]) => y >= Y0 && y <= Y1).map((r) => r[1])));
   const x = linear(Y0, Y1, M.l, M.l + iw);
   const y = linear(0, max, M.t + ih, M.t);
@@ -89,7 +89,7 @@ export function mount(el: HTMLElement, data: IpData): (() => void) | void {
       'Filing rate by state',
       'Click a state for its full profile. Scroll-wheel zoom is off so the page keeps scrolling.',
       `<div class="ctl-row">
-        ${seg('mode', [{ id: 'rate', label: `Per 100,000 people (${RECENT_FROM}–${RECENT_TO})` }, { id: 'total', label: 'Total applications, all years' }], 'rate')}
+        ${seg('mode', [{ id: 'rate', label: `Per 100,000 people (${RECENT_FROM}–${RECENT_TO})` }, { id: 'total', label: 'Total applications, all years' }], 'rate', 'Choose how to measure filing')}
       </div>
       <div class="map-wrap" data-map><div class="map-canvas"></div></div>
       <div data-map-legend></div>`,
@@ -214,6 +214,8 @@ export function mount(el: HTMLElement, data: IpData): (() => void) | void {
     legendHost.innerHTML = '<p class="error">State boundaries could not be loaded. The table below carries the same numbers.</p>';
   });
 
+  // This table is hand-rendered (not sortableTable), so it is bound once and
+  // never repainted — safe.
   el.querySelectorAll('tr[data-row]').forEach((tr) => {
     const open = () => {
       const s = states.find((x) => x.st === (tr as HTMLElement).dataset.row);

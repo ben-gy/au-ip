@@ -111,8 +111,8 @@ export function mount(el: HTMLElement, data: IpData): void {
       'Sort by any column. Click a row for the full portfolio, the year-by-year timeline and the registered names merged into it.',
       `<div class="ctl-row">
         <input type="search" data-q placeholder="Search filers — try CSIRO, Aristocrat, Apple…" aria-label="Search filers" style="min-width:min(300px,100%)" />
-        ${seg('origin', [{ id: 'all', label: 'All' }, { id: 'au', label: 'Australian' }, { id: 'foreign', label: 'Foreign' }], 'all')}
-        ${seg('type', [{ id: 'all', label: 'Any right' }, ...TYPES.map((t) => ({ id: t, label: RIGHT_LABEL[t] }))], 'all')}
+        ${seg('origin', [{ id: 'all', label: 'All' }, { id: 'au', label: 'Australian' }, { id: 'foreign', label: 'Foreign' }], 'all', 'Filter by applicant origin')}
+        ${seg('type', [{ id: 'all', label: 'Any right' }, ...TYPES.map((t) => ({ id: t, label: RIGHT_LABEL[t] }))], 'all', 'Filter by right type')}
         <span class="ctl-note" data-count></span>
       </div>
       <div data-table></div>`,
@@ -154,17 +154,6 @@ export function mount(el: HTMLElement, data: IpData): void {
     { key: 'y1', label: 'Latest', num: true, sort: (f: Filer) => f.y1, render: (f: Filer) => String(f.y1) },
   ];
 
-  const wire = () => {
-    tableHost.querySelectorAll('tr[data-row]').forEach((tr) => {
-      const open = () => {
-        const f = data.filers.find((x) => x.k === (tr as HTMLElement).dataset.row);
-        if (f) openFiler(f, data);
-      };
-      tr.addEventListener('click', open);
-      tr.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') open(); });
-    });
-  };
-
   const rerender = sortableTable(tableHost, {
     rows: filtered(),
     columns,
@@ -172,13 +161,15 @@ export function mount(el: HTMLElement, data: IpData): void {
     clickable: true,
     rowKey: (f) => f.k,
     empty: 'No filer matches those filters.',
+    onRowActivate: (k) => {
+      const f = data.filers.find((x) => x.k === k);
+      if (f) openFiler(f, data);
+    },
   });
-  wire();
 
   const refresh = () => {
     const rows = filtered();
     rerender(rows);
-    wire();
     countHost.textContent = `${num(rows.length)} filer${rows.length === 1 ? '' : 's'}`;
   };
   refresh();

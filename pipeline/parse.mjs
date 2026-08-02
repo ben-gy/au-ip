@@ -120,7 +120,12 @@ const GEO_TAIL = ['australia', 'australasia', 'aust', 'anz', 'australia and new 
  * 'australia post' and 'ip australia' are never reduced to nothing.
  */
 export function normaliseFilerName(raw) {
-  let s = (raw || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  // Strip punctuation only — NOT everything outside a-z. An ASCII-only class
+  // erases any name written in another script entirely: Hitachi
+  // (株式会社日立製作所), Samsung (삼성전자주식회사) and every Cyrillic-named
+  // applicant all normalised to the empty string, which dropped them from the
+  // leaderboard and, worse, merged them into one nameless bucket downstream.
+  let s = (raw || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
   if (!s) return '';
 
   let changed = true;

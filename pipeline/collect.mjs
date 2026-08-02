@@ -46,9 +46,13 @@ const TYPES = ['patent', 'trade_mark', 'design', 'pbr'];
 const TYPE_IX = new Map(TYPES.map((t, i) => [t, i]));
 const TYPE_CH = ['p', 't', 'd', 'b'];
 
-// Packed appMap value: year * 4 + originRank.
+// Packed appMap value: year * 8 + originRank * 2 + countryCounted.
 // originRank: 0 = no founding applicant seen, 1 = all origins blank,
 //             2 = foreign only, 3 = at least one Australian applicant.
+// countryCounted marks that this application has already been tallied against
+// a country/state/postcode, so a co-filed application is counted once rather
+// than once per applicant — country totals are labelled "applications" and
+// must therefore BE applications.
 const ORIGIN_RANK = { none: 0, unknown: 1, foreign: 2, domestic: 3 };
 const RANK_NAME = ['none', 'unknown', 'foreign', 'domestic'];
 
@@ -80,6 +84,8 @@ const grantLagBuckets = new Map();       // `${type}|${decade}|${bucket}` → n
 const lifeByType = new Map();            // type → {filed, registered, retired, lagSum, lagN}
 const survival = new Map();              // `${type}|${cohortDecade}|${yearsAlive}` → n
 const cohortSize = new Map();            // `${type}|${cohortDecade}` → n
+const atRisk = new Map();                // `${type}|${cohortDecade}|${yearsAlive}` → n at risk
+let EXTRACT_ISO = new Date().toISOString();  // replaced with the real extract date in main()
 
 const LAG_BUCKETS = [0, 180, 365, 547, 730, 1095, 1460, 1825, 2555, 3650];
 function lagBucket(days) {
@@ -121,7 +127,7 @@ async function passApplications(url, entries) {
     const year = yearOf(filedIso);
     if (!year) { totals.noYear++; return; }
 
-    appMap.set(TYPE_CH[ti] + num, year * 4);
+    appMap.set(TYPE_CH[ti] + num, year * 8);
     if (type === 'patent') inc(subtypeByYear, `${sub}|${year}`);
 
     let life = lifeByType.get(type);
@@ -139,14 +145,24 @@ async function passApplications(url, entries) {
       }
     }
 
-    // Survival: of the rights that actually came into force, how many are still
-    // alive N years on? Only cohorts old enough to have had the chance count.
+    // Survival: of the rights that came into force, how many are still in force
+    // N years on?
+    //
+    // The denominator has to be the number AT RISK at year N, not the whole
+    // cohort. A right that took effect in 2019 has only had ~7 years in which
+    // it could possibly have lapsed; counting it as a survivor at year 20
+    // because it has not lapsed yet is right-censoring, and it makes recent
+    // cohorts flatten towards 100% purely because they are young.
     const enforceIso = f[ix.gained_enforceable_status_date] || regIso;
     if (enforceIso && decade >= 1980 && decade <= 2010) {
       inc(cohortSize, `${type}|${decade}`);
       const retiredIso = f[ix.deemed_retired_date];
-      const alive = retiredIso ? Math.floor((daysBetween(enforceIso, retiredIso) ?? 0) / 365.25) : 99;
-      for (let y = 1; y <= 20; y++) if (alive >= y) inc(survival, `${type}|${decade}|${y}`);
+      const observable = Math.floor((daysBetween(enforceIso, EXTRACT_ISO) ?? 0) / 365.25);
+      const lived = retiredIso ? Math.floor((daysBetween(enforceIso, retiredIso) ?? 0) / 365.25) : Infinity;
+      for (let y = 1; y <= 20 && y <= observable; y++) {
+        inc(atRisk, `${type}|${decade}|${y}`);
+        if (lived >= y) inc(survival, `${type}|${decade}|${y}`);
+      }
       if (retiredIso) life.retired++;
     }
   });
@@ -192,7 +208,7 @@ const firmType = new Map();       // `${firmKey}|${type}` → n
 const firmOrigin = new Map();     // `${firmKey}|${origin}` → n
 const firmYear = new Map();       // `${firmKey}|${year}` → n
 
-const partyStats = { rows: 0, applicantRows: 0, foundingApplicant: 0, agentRows: 0, orphanApplicant: 0, orphanAgent: 0, redactedApplicant: 0, redactedAgent: 0 };
+const partyStats = { rows: 0, applicantRows: 0, foundingApplicant: 0, agentRows: 0, orphanApplicant: 0, orphanAgent: 0, redactedApplicant: 0, redactedAgent: 0, countedApplications: 0, unnamedClientRows: 0 };
 
 async function passParties(url, entries) {
   const e = member(entries, 'party_activity.csv');
@@ -228,15 +244,24 @@ async function passParties(url, entries) {
 
       const packed = appMap.get(key);
       if (packed === undefined) { partyStats.orphanApplicant++; return; }
-      const year = packed >> 2;
+      const year = packed >> 3;
+      const prevRank = (packed >> 1) & 3;
+      const counted = packed & 1;
 
       const cc = (f[ix.country_code] || '').trim().toLowerCase();
       const origin = originOf(cc);
       const rank = ORIGIN_RANK[origin];
-      if (rank > (packed & 3)) appMap.set(key, (year * 4) + rank);
+      const nextRank = rank > prevRank ? rank : prevRank;
 
-      inc(countryType, `${cc || 'zz'}|${type}`);
-      inc(countryDecade, `${cc || 'zz'}|${Math.floor(year / 10) * 10}`);
+      // First founding applicant seen decides the application's country. Later
+      // co-applicants still upgrade the origin rank but must not add a second
+      // country tally, or the totals stop being application counts.
+      if (!counted) {
+        inc(countryType, `${cc || 'zz'}|${type}`);
+        inc(countryDecade, `${cc || 'zz'}|${Math.floor(year / 10) * 10}`);
+        partyStats.countedApplications++;
+      }
+      appMap.set(key, (year * 8) + (nextRank * 2) + 1);
 
       const name = f[ix.party_name] || '';
       const redacted = isRedactedName(name);
@@ -246,7 +271,7 @@ async function passParties(url, entries) {
 
       const st = cleanState(f[ix.state_code]);
       const pc = cleanAuPostcode(f[ix.post_code], cc);
-      if (cc === 'au') {
+      if (cc === 'au' && !counted) {
         if (st) { inc(stateYear, `${st}|${year}`); inc(stateType, `${st}|${type}`); }
         if (pc) { inc(postcode, pc); inc(postcodeType, `${pc}|${type}`); }
       }
@@ -266,7 +291,7 @@ async function passParties(url, entries) {
       if (!fk) return;
       inc(firmTotal, fk);
       inc(firmType, `${fk}|${type}`);
-      inc(firmYear, `${fk}|${packed >> 2}`);
+      inc(firmYear, `${fk}|${packed >> 3}`);
       gBuf.push(`${fk}\t${key}\n`);
       flush(gBuf, agentsOut);
     }
@@ -281,8 +306,8 @@ async function passParties(url, entries) {
   // Origin per application is only final once every founding applicant row has
   // been seen, so the per-year origin series is rolled up afterwards.
   for (const [key, packed] of appMap) {
-    const year = packed >> 2;
-    const rank = packed & 3;
+    const year = packed >> 3;
+    const rank = (packed >> 1) & 3;
     const type = TYPES[TYPE_CH.indexOf(key[0])];
     inc(originYear, `${type}|${year}|${RANK_NAME[rank]}`);
   }
@@ -295,6 +320,15 @@ async function passParties(url, entries) {
   // no filing date. A large orphan rate would mean the join key itself is wrong.
   const orphanPct = pct(partyStats.orphanApplicant, partyStats.foundingApplicant);
   if (orphanPct > 3) fail(`${orphanPct}% of founding applicant rows do not join to an application`);
+
+  // GATE 3b — country totals are labelled "applications", so they must sum to
+  // the number of applications that have a founding applicant, not to the
+  // number of applicant rows.
+  let ccSum = 0;
+  for (const v of countryType.values()) ccSum += v;
+  if (ccSum !== partyStats.countedApplications) {
+    fail(`country totals sum to ${ccSum}, expected ${partyStats.countedApplications} applications`);
+  }
 
   // GATE 3 — the origin buckets must account for every joined application.
   let originSum = 0;
@@ -339,8 +373,8 @@ async function passClassifications(url, entries) {
     const key = TYPE_CH[ti] + f[ix.application_number];
     const packed = appMap.get(key);
     if (packed === undefined) return;
-    const year = packed >> 2;
-    const rank = packed & 3;
+    const year = packed >> 3;
+    const rank = (packed >> 1) & 3;
     const decade = Math.floor(year / 10) * 10;
     const area = f[ix.classification_area];
 
@@ -450,10 +484,18 @@ async function buildAttorneys(topFirms, clientsPerFirm) {
 
   const edges = new Map();   // `${firm}|${client}` → n
   const clientName = new Map();
+  const unnamed = new Map();  // firm → applications whose applicant cannot be named
   await readLines(path.join(TMP, 'applicants.tsv'), (line) => {
     const p = line.split('\t');
     const fk = appToFirm.get(p[1]);
     if (!fk) return;
+    // A pseudonymised applicant has a deliberately blank key. Without this
+    // guard every one of them — plus, before the Unicode fix, every applicant
+    // whose name is not written in Latin script — collapses into a single
+    // client keyed on the empty string, which then takes whichever raw name
+    // happened to be seen first and is published as the largest client of most
+    // firms on the site. It is counted and disclosed, never named.
+    if (!p[0]) { inc(unnamed, fk); partyStats.unnamedClientRows++; return; }
     inc(edges, `${fk}|${p[0]}`);
     if (!clientName.has(p[0])) clientName.set(p[0], p[8]);
   });
@@ -478,6 +520,7 @@ async function buildAttorneys(topFirms, clientsPerFirm) {
       k: f.k,
       name: titleCaseName(f.k),
       n: f.n,
+      unnamed: unnamed.get(f.k) || 0,
       t: types,
       clients: clients.map(([ck, cn]) => ({ k: ck, name: titleCaseName(clientName.get(ck) || ck), n: cn })),
       nClients: (byFirm.get(f.k) || []).length,
@@ -592,8 +635,8 @@ function findings(series, filers, origin) {
   if (a && b) {
     out.push({
       sev: 'alert',
-      title: 'Australian patenting fell while foreign filing nearly doubled',
-      body: `Australian-origin patent applications went from ${a[1].toLocaleString()} in 1995 to ${b[1].toLocaleString()} in ${b[0]} — a fall in absolute terms, not just in share. Over the same years foreign filings into Australia rose from ${a[2].toLocaleString()} to ${b[2].toLocaleString()}. The Australian share of all patent filings dropped from ${share(a)}% to ${share(b)}%.`,
+      title: `Australian patenting fell while foreign filing ${(b[2] / (a[2] || 1)).toFixed(1)}\u00d7'd`,
+      body: `Australian-origin patent applications went from ${a[1].toLocaleString()} in 1995 to ${b[1].toLocaleString()} in ${b[0]} — a fall in absolute terms, not just in share. Over the same years foreign filings into Australia rose from ${a[2].toLocaleString()} to ${b[2].toLocaleString()} — a factor of ${(b[2] / (a[2] || 1)).toFixed(2)}. The Australian share of all patent filings dropped from ${share(a)}% to ${share(b)}%.`,
       view: 'divergence',
     });
   }
@@ -665,6 +708,9 @@ async function main() {
   if (!res) throw new Error('iprapid.zip resource not found in the CKAN package');
   const zipUrl = res.url;
   const sourceDate = (res.last_modified || pkg.result.metadata_modified || '').slice(0, 10);
+  // Right-censoring needs to know when observation stops: the extract date, not
+  // today, or a rerun of an old archive would invent extra survival time.
+  EXTRACT_ISO = `${sourceDate}T00:00:00.000Z`;
   log(`  ${zipUrl}\n         last modified ${sourceDate}, licence ${pkg.result.license_id}`);
   if (pkg.result.license_id !== 'cc-by-4.0') fail(`licence changed to ${pkg.result.license_id} — do not republish without checking`);
 
@@ -729,7 +775,10 @@ async function main() {
   for (const f of fields) {
     // Specialisation: how much more (or less) of Australia's own patenting sits
     // in this field than of all patenting filed here. 0 = identical mix.
-    f.spec = Math.round((pct(f.au, totalFieldAu) - pct(f.n, totalField)) * 10) / 10;
+    // Subtract at full precision then round once. Rounding each share to one
+    // decimal first and subtracting can shift the result by 0.1pp, which is
+    // enough to move a headline figure.
+    f.spec = Math.round(((f.au / (totalFieldAu || 1)) - (f.n / (totalField || 1))) * 1000) / 10;
   }
 
   // ── brands.json
@@ -779,8 +828,15 @@ async function main() {
       cohorts: [1980, 1990, 2000, 2010].map((d) => {
         const size = cohortSize.get(`${t}|${d}`) || 0;
         if (!size) return null;
+        // pts stops where the cohort runs out of observation time, so a curve
+        // never extends past what the data can actually support.
         const pts = [];
-        for (let y = 1; y <= 20; y++) pts.push(pct(survival.get(`${t}|${d}|${y}`) || 0, size));
+        for (let y = 1; y <= 20; y++) {
+          const risk = atRisk.get(`${t}|${d}|${y}`) || 0;
+          if (risk < size * 0.5) break;
+          pts.push(pct(survival.get(`${t}|${d}|${y}`) || 0, risk));
+        }
+        if (pts.length < 2) return null;
         return { decade: d, size, pts };
       }).filter(Boolean),
     })).filter((x) => x.cohorts.length),

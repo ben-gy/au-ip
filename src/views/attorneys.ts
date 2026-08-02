@@ -97,8 +97,9 @@ function openFirm(f: Firm): void {
     <h3>Agent of record</h3>
     <dl class="kv">
       <dt>Applications</dt><dd>${num(f.n)}</dd>
-      <dt>Distinct clients</dt><dd>${num(f.nClients)}</dd>
-      <dt>Applications per client</dt><dd>${(f.n / Math.max(1, f.nClients)).toFixed(1)}</dd>
+      <dt>Named clients</dt><dd>${num(f.nClients)}</dd>
+      <dt>Applications per named client</dt><dd>${(f.n / Math.max(1, f.nClients)).toFixed(1)}</dd>
+      ${f.unnamed ? `<dt>Applicant not nameable</dt><dd>${num(f.unnamed)}</dd>` : ''}
       ${peak[0] ? `<dt>Busiest year</dt><dd>${peak[0]} (${num(peak[1])})</dd>` : ''}
     </dl>
     <h3>By right type</h3>
@@ -109,7 +110,7 @@ function openFirm(f: Firm): void {
     <ul class="variant-list">
       ${f.clients.map((c) => `<li><span>${esc(c.name)}</span><span>${num(c.n)}</span></li>`).join('') || '<li><span>No client breakdown available</span><span>—</span></li>'}
     </ul>
-    <p style="margin-top:14px">Counts are applications on which this firm is the <em>current</em> agent of record. Where a matter has changed hands, only the present agent is credited.</p>
+    <p style="margin-top:14px">Counts are applications on which this firm is the <em>current</em> agent of record. Where a matter has changed hands, only the present agent is credited.${f.unnamed ? ` A further ${num(f.unnamed)} of its applications have an applicant that IP Australia has pseudonymised; those are counted here but cannot be attributed to a named client, so they appear in no client list.` : ''}</p>
   `);
 }
 
@@ -123,11 +124,11 @@ export function mount(el: HTMLElement, data: IpData): void {
     ${viewHead({
       title: 'Attorneys',
       question: 'Which patent attorney firms file Australia&rsquo;s intellectual property, and for whom?',
-      blurb: `Every application names an ${gloss('attorney', 'agent of record')} — the firm that files and prosecutes it. Joining ${num(totalAgent)} agent records to their applicants gives the client map below, which is not published anywhere else. Firms sit on the inner ring, sized by volume; their largest clients fan out around them. A further ${num(data.core.totals.redactedAgents)} agent records carry a pseudonymised token rather than a name and are excluded from these rankings.`,
+      blurb: `Every application names an ${gloss('attorney', 'agent of record')} — the firm that files and prosecutes it. Joining ${num(totalAgent)} agent records to their applicants gives the client map below, which is not published anywhere else. Firms sit on the inner ring, sized by volume; their largest clients fan out around them. Applicants that IP Australia has pseudonymised cannot be named, so they are counted per firm but never drawn as a client — and ${num(data.core.totals.redactedAgents)} agent records are pseudonymised the same way and excluded from the firm rankings entirely.`,
     })}
 
     ${statRow([
-      { value: esc(top[0]?.name ?? '—'), label: 'Largest firm by volume', sub: `${num(top[0]?.n ?? 0)} applications · ${num(top[0]?.nClients ?? 0)} clients` },
+      { value: esc(top[0]?.name ?? '—'), label: 'Largest firm by volume', sub: `${num(top[0]?.n ?? 0)} applications · ${num(top[0]?.nClients ?? 0)} named clients` },
       { value: concentration, label: 'Share handled by the top ten firms', tone: 'warn' },
       { value: compact(data.core.totals.firms), label: 'Distinct agents on the register', sub: 'firms and sole practitioners' },
       { value: compact(totalAgent), label: 'Applications with a current agent' },
@@ -148,7 +149,7 @@ export function mount(el: HTMLElement, data: IpData): void {
       'Every listed firm',
       'The same numbers, ranked. Click any row for the client list.',
       `<div class="tbl-wrap"><table class="data"><thead><tr>
-        <th class="num">#</th><th>Firm</th><th class="num">Applications</th><th class="num">Clients</th><th class="num">Apps / client</th><th>Right mix</th>
+        <th class="num">#</th><th>Firm</th><th class="num">Applications</th><th class="num">Named clients</th><th class="num">Apps / client</th><th>Right mix</th>
       </tr></thead><tbody>
         ${firms.map((f, i) => `<tr class="clickable" data-row="${esc(f.k)}" tabindex="0">
           <td class="num">${i + 1}</td>

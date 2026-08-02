@@ -32,7 +32,7 @@ The thing it does that nothing else public does is **separate Australian-origin 
 
 - **The Divergence** — mirrored area charts, one per right type: Australian applicants above the line, foreign below. A single stacked chart would hide that the two series move in opposite directions.
 - **Origin** — a Leaflet world choropleth of where the IP filed in Australia comes from, on a logarithmic ramp because the United States alone out-files the next twenty countries combined.
-- **Technology** — a WIPO-35 field × decade heatmap, plus a diverging specialisation bar. Australia over-indexes hardest in civil engineering (+8.3pp) and furniture & games (+4.7pp) and under-indexes hardest in pharmaceuticals (−6.1pp).
+- **Technology** — a WIPO-35 field × decade heatmap, plus a diverging specialisation bar. Australia over-indexes hardest in civil engineering (+8.4pp) and furniture & games (+4.7pp) and under-indexes hardest in pharmaceuticals (−6.2pp).
 - **Filers** — a searchable leaderboard of merged filer groups, with the merge rule made inspectable: every drill-down lists the registered name variants that were combined.
 - **Attorneys** — a radial hub-and-spoke map of the applicant↔attorney-firm relation, built from 3.8 million agent records.
 - **Lifecycle** — filing-to-grant decay curves and survival-to-lapse curves by decade cohort, plus the innovation patent's legislative cliff on 26 August 2021.
@@ -44,7 +44,7 @@ The thing it does that nothing else public does is **separate Australian-origin 
 
 - **Runtime:** Vanilla TypeScript
 - **Build:** Vite 6
-- **Testing:** Vitest (80 tests)
+- **Testing:** Vitest (85 tests)
 - **Hosting:** GitHub Pages (static, no backend)
 - **Data:** GitHub Actions pipeline, monthly
 - **Libraries:** Leaflet 1.9 for maps. Every chart is hand-rolled SVG — no charting library.
@@ -83,7 +83,7 @@ Three of the six members are streamed and aggregated:
 
 The 4.2 GB `application_events.csv` is never touched. Between passes an in-memory index carries the join key, packing the filing year and the origin bucket into one integer per application.
 
-Seven reconciliation gates run during collection and abort the build rather than publish a wrong number. The load-bearing one is anchored to the **source**: every data row in `application.csv` must end in the index or in a *named* rejection bucket, and an `ip_right_type` the pipeline does not recognise is a hard failure. That gate exists because an earlier version reconciled only against rows it had already accepted — a tautology that stayed green while silently dropping all 11,649 plant breeder's rights.
+Eight reconciliation gates run during collection and abort the build rather than publish a wrong number. The load-bearing one is anchored to the **source**: every data row in `application.csv` must end in the index or in a *named* rejection bucket, and an `ip_right_type` the pipeline does not recognise is a hard failure. That gate exists because an earlier version reconciled only against rows it had already accepted — a tautology that stayed green while silently dropping all 11,649 plant breeder's rights.
 
 ## License
 

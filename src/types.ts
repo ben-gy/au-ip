@@ -96,6 +96,8 @@ export interface Firm {
   k: string;
   name: string;
   n: number;
+  /** Applications whose applicant is pseudonymised at source and cannot be named. */
+  unnamed: number;
   t: number[];
   clients: FirmClient[];
   nClients: number;

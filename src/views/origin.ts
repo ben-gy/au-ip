@@ -47,7 +47,7 @@ export function mount(el: HTMLElement, data: IpData): (() => void) | void {
       blurb: `Every application is attributed to the country its ${gloss('founding_applicant', 'founding applicant')} recorded. Colour runs on a logarithmic scale — on a linear one the United States would be the only country you could see.`,
     })}
     <div class="ctl-row">
-      ${seg('type', [{ id: 'all', label: 'All rights' }, ...TYPES.map((t) => ({ id: t, label: RIGHT_LABEL[t] }))], 'all')}
+      ${seg('type', [{ id: 'all', label: 'All rights' }, ...TYPES.map((t) => ({ id: t, label: RIGHT_LABEL[t] }))], 'all', 'Filter by right type')}
       <label class="year-ctl">
         <span class="sel-lab">Era</span>
         <input type="range" min="-1" max="${decades.length - 1}" value="-1" data-decade aria-label="Filter by decade" />
@@ -126,14 +126,10 @@ export function mount(el: HTMLElement, data: IpData): (() => void) | void {
         },
         { key: 'share', label: 'Share', num: true, sort: (c) => c.v, render: (c) => pct(c.v, r.reduce((s, x) => s + x.v, 0), 2) },
       ],
-    });
-    tableHost.querySelectorAll('tr[data-row]').forEach((tr) => {
-      const open = () => {
-        const c = data.origin.countries.find((x) => x.iso === (tr as HTMLElement).dataset.row);
+      onRowActivate: (iso) => {
+        const c = data.origin.countries.find((x) => x.iso === iso);
         if (c) detail(c);
-      };
-      tr.addEventListener('click', open);
-      tr.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') open(); });
+      },
     });
   };
 

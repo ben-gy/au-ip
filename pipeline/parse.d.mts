@@ -14,6 +14,7 @@ export function cleanAuPostcode(raw: string | undefined | null, countryCode: str
 export function originOf(countryCode: string | undefined | null): 'domestic' | 'foreign' | 'unknown';
 export function normaliseFilerName(raw: string | undefined | null): string;
 export function filerKey(name: string | undefined | null): string;
+export function isRedactedName(raw: string | undefined | null): boolean;
 export function titleCaseName(raw: string | undefined | null): string;
 export function parseWipoField(area: string | undefined | null): { rank: number; key: string; label: string } | null;
 export function prettyFieldLabel(slug: string): string;

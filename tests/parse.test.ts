@@ -10,7 +10,7 @@ import {
   splitCsvLine, headerIndex, yearOf, daysBetween, cleanState, cleanAuPostcode,
   originOf, normaliseFilerName, filerKey, titleCaseName, parseWipoField,
   parseNiceClass, prettyFieldLabel, NICE_CLASSES, NICE_KIND, pct,
-  ORIGIN_SHARE_LAST_RELIABLE_YEAR, VALID_STATES,
+  ORIGIN_SHARE_LAST_RELIABLE_YEAR, VALID_STATES, isRedactedName,
 } from '../pipeline/parse.mjs';
 
 describe('splitCsvLine', () => {
@@ -162,6 +162,15 @@ describe('normaliseFilerName', () => {
     expect(normaliseFilerName('   ')).toBe('');
     expect(normaliseFilerName('...')).toBe('');
   });
+  it('keeps names written in other scripts instead of erasing them', () => {
+    // An ASCII-only character class turns every one of these into the empty
+    // string, which drops the filer AND merges them all into one nameless
+    // bucket that then gets published as a real company.
+    expect(normaliseFilerName('Haldor Topsøe')).toBe('haldor topsøe');
+    expect(normaliseFilerName('Københavns Universitet')).toBe('københavns universitet');
+    expect(normaliseFilerName('株式会社日立製作所')).toBe('株式会社日立製作所');
+    expect(normaliseFilerName('Ооо Бостонджин')).toBe('ооо бостонджин');
+  });
   it('collapses whitespace and strips punctuation', () => {
     expect(normaliseFilerName('  ACME   Widgets, Inc.  ')).toBe('acme widgets');
   });
@@ -257,5 +266,29 @@ describe('PCT lag guard', () => {
     // undercount foreign filings. The cutoff must sit at least two years back.
     expect(ORIGIN_SHARE_LAST_RELIABLE_YEAR).toBeLessThanOrEqual(new Date().getUTCFullYear() - 2);
     expect(ORIGIN_SHARE_LAST_RELIABLE_YEAR).toBeGreaterThan(2015);
+  });
+});
+
+describe('isRedactedName', () => {
+  it('detects the hex tokens IP Australia uses for redacted parties', () => {
+    // Three of these outrank every real attorney firm but the top five, so they
+    // must never reach a leaderboard or a client list.
+    expect(isRedactedName('tf9028faec74be6ec9b852b0a542e2f39')).toBe(true);
+    expect(isRedactedName('t7609cb245858fd9cdafcb5f5e1de6602')).toBe(true);
+    expect(isRedactedName('1e913e1b06ead0b66e30b6867bf63549')).toBe(true);
+  });
+  it('does not flag ordinary company names', () => {
+    expect(isRedactedName('aristocrat technologies')).toBe(false);
+    expect(isRedactedName('csiro')).toBe(false);
+    expect(isRedactedName('3m innovative properties company')).toBe(false);
+    expect(isRedactedName('bp plc')).toBe(false);
+  });
+  it('does not flag short hex-looking words', () => {
+    expect(isRedactedName('faced')).toBe(false);
+    expect(isRedactedName('decade')).toBe(false);
+  });
+  it('handles empty input', () => {
+    expect(isRedactedName('')).toBe(false);
+    expect(isRedactedName(undefined)).toBe(false);
   });
 });

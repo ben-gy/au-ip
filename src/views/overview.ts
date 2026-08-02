@@ -17,7 +17,9 @@ function totalChart(data: IpData): string {
   const iw = W - M.l - M.r;
   const ih = H - M.t - M.b;
   const START = 1904;
-  const END = 2026;
+  // Derived, never a literal: a hard-coded end year silently drops the newest
+  // year of data the first time the pipeline runs after New Year.
+  const END = Math.max(START + 1, ...TYPES.flatMap((t) => data.core.series[t].map((r) => r[0])));
 
   const byType = TYPES.map((t) => {
     const rows = data.core.series[t].filter((r) => r[0] >= START && r[0] <= END);
@@ -53,12 +55,14 @@ function totalChart(data: IpData): string {
     hover.push(`<rect class="mark" x="${(x(yr) - iw / (END - START) / 2).toFixed(1)}" y="${M.t}" width="${(iw / (END - START)).toFixed(2)}" height="${ih}" fill="transparent" data-tip="${tipAttr(`${yr}\n${parts.join('\n')}`)}"/>`);
   }
 
-  // 2026 is a part-year — the extract stops in July, so its drop is calendar,
-  // not collapse.
-  const partial = `<rect x="${x(2026).toFixed(1)}" y="${M.t}" width="${(M.l + iw - x(2026)).toFixed(1)}" height="${ih}" fill="#94a3b8" opacity="0.14"/>
-    <text class="ax-txt" x="${(x(2026) - 4).toFixed(1)}" y="${M.t + 11}" text-anchor="end">2026 part-year</text>`;
+  // The final year is a part-year — the extract stops mid-year, so its drop is
+  // calendar, not collapse. The band is anchored HALF a year back: anchored on
+  // END itself it is exactly zero pixels wide and renders nothing at all.
+  const bandX = x(END - 0.5);
+  const partial = `<rect x="${bandX.toFixed(1)}" y="${M.t}" width="${Math.max(2, M.l + iw - bandX).toFixed(1)}" height="${ih}" fill="#94a3b8" opacity="0.16"/>
+    <text class="ax-txt" x="${(bandX - 5).toFixed(1)}" y="${M.t + 11}" text-anchor="end">${END} part-year</text>`;
 
-  return `<div class="chart chart-xwide">${svgOpen(W, H, 'Applications filed per year by right type, 1904 to 2026')}
+  return `<div class="chart chart-xwide">${svgOpen(W, H, `Applications filed per year by right type, ${START} to ${END}`)}
     ${partial}${grid}
     <line class="ax-line" x1="${M.l}" y1="${M.t + ih}" x2="${M.l + iw}" y2="${M.t + ih}"/>
     ${xt.join('')}${lines}${hover.join('')}
@@ -68,6 +72,7 @@ function totalChart(data: IpData): string {
 export function mount(el: HTMLElement, data: IpData): void {
   const { totals, sourceDate, lastReliableOriginYear: lr } = data.core;
   const patent = data.core.series.patent.find((r) => r[0] === lr);
+  const at1995 = data.core.series.patent.find((r) => r[0] === 1995);
   const tm = data.core.series.trade_mark.find((r) => r[0] === lr);
   const auFilers = data.filers.filter((f) => f.cc === 'au');
 
@@ -75,14 +80,14 @@ export function mount(el: HTMLElement, data: IpData): void {
     ${viewHead({
       title: 'Australia registers the world&rsquo;s brands. It has quietly stopped inventing.',
       question: 'What does the whole Australian intellectual property register actually say?',
-      blurb: `Every ${gloss('patent')}, ${gloss('trade_mark', 'trade mark')}, ${gloss('design', 'registered design')} and ${gloss('pbr', "plant breeder's right")} ever filed in Australia — ${num(totals.applications)} applications from 1904 to 2026 — read out of IP Australia's ${gloss('ip_rapid')} release. The register is public but ships as a single ${bytes(data.core.archiveBytes)} archive that expands to ${bytes(data.core.archiveUncompressedBytes)}, which is why nobody reads it.`,
+      blurb: `Every ${gloss('patent')}, ${gloss('trade_mark', 'trade mark')}, ${gloss('design', 'registered design')} and ${gloss('pbr', "plant breeder's right")} ever filed in Australia — ${num(totals.applications)} applications from 1904 to ${sourceDate.slice(0, 4)} — read out of IP Australia's ${gloss('ip_rapid')} release. The register is public but ships as a single ${bytes(data.core.archiveBytes)} archive that expands to ${bytes(data.core.archiveUncompressedBytes)}, which is why nobody reads it.`,
     })}
 
     ${statRow([
-      { value: compact(totals.applications), label: 'Applications on the register', sub: '1904 → 2026', tip: `${num(totals.applications)} rows, every one of them accounted for.` },
+      { value: compact(totals.applications), label: 'Applications on the register', sub: `1904 → ${sourceDate.slice(0, 4)}`, tip: `${num(totals.applications)} rows, every one of them accounted for.` },
       { value: compact(totals.byType.patent), label: 'Patents', tone: undefined, tip: `${num(totals.byType.patent)} patent applications.` },
       { value: compact(totals.byType.trade_mark), label: 'Trade marks', tip: `${num(totals.byType.trade_mark)} trade mark applications.` },
-      ...(patent ? [{ value: pct(patent[1], patent[1] + patent[2], 1), label: `Patents from Australian applicants, ${lr}`, tone: 'for' as const, sub: 'down from 41.6% in 1995' }] : []),
+      ...(patent && at1995 ? [{ value: pct(patent[1], patent[1] + patent[2], 1), label: `Patents from Australian applicants, ${lr}`, tone: 'for' as const, sub: `down from ${pct(at1995[1], at1995[1] + at1995[2], 1)} in 1995` }] : []),
       ...(tm ? [{ value: pct(tm[1], tm[1] + tm[2], 1), label: `Trade marks from Australian applicants, ${lr}`, tone: 'dom' as const, sub: 'Australians brand, not invent' }] : []),
       { value: compact(totals.filerGroups), label: 'Distinct filers', sub: `after merging name variants`, tip: 'Registered applicant names, combined into filer groups.' },
     ])}
@@ -111,7 +116,7 @@ export function mount(el: HTMLElement, data: IpData): void {
         <li><strong>Everything is by filing year.</strong> Filing is the decision an applicant actually makes; grant is what an examiner does years later.</li>
         <li><strong>Only ${gloss('founding_applicant', 'founding applicants')} are counted.</strong> The register holds ${num(totals.partyRows)} party records against ${num(totals.applications)} applications because ownership changes hands. Counting every record would credit large corporates several times for one filing.</li>
         <li><strong>Share figures stop at ${lr}.</strong> The ${gloss('pct')} makes the most recent years look artificially Australian.</li>
-        <li><strong>2026 is a part-year.</strong> The extract runs to ${isoDate(sourceDate)}.</li>
+        <li><strong>${sourceDate.slice(0, 4)} is a part-year.</strong> The extract runs to ${isoDate(sourceDate)}.</li>
       </ul>
       <div class="jump-row">
         ${jump('divergence', 'The divergence')}

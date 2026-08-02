@@ -122,7 +122,7 @@ function subtypeChart(data: IpData): string {
   const iw = W - M.l - M.r;
   const ih = H - M.t - M.b;
   const Y0 = 1980;
-  const Y1 = 2026;
+  const Y1 = Math.max(Y0 + 1, ...keys.flatMap((k) => (st[k] ?? []).map((r) => r[0])));
   const max = Math.max(1, ...keys.flatMap((k) => (st[k] ?? []).map((r) => r[1])));
   const x = linear(Y0, Y1, M.l, M.l + iw);
   const y = linear(0, max, M.t + ih, M.t);
@@ -145,7 +145,7 @@ function subtypeChart(data: IpData): string {
   }).join('');
 
   const cliff = x(2021.65);
-  return `<div class="chart chart-xwide">${svgOpen(W, H, 'Patent applications by sub-type, 1980 to 2026')}
+  return `<div class="chart chart-xwide">${svgOpen(W, H, `Patent applications by sub-type, ${Y0} to ${Y1}`)}
     ${grid}
     <line x1="${cliff.toFixed(1)}" y1="${M.t}" x2="${cliff.toFixed(1)}" y2="${M.t + ih}" stroke="${SUBTYPE_COLOR.innovation}" stroke-width="1.2" stroke-dasharray="4 3"/>
     <text class="ax-txt" x="${(cliff - 6).toFixed(1)}" y="${M.t + 12}" text-anchor="end" fill="${SUBTYPE_COLOR.innovation}" font-weight="600">26 Aug 2021 — innovation patent closed</text>
@@ -186,7 +186,7 @@ export function mount(el: HTMLElement, data: IpData): void {
 
     <div class="ctl-row">
       <span class="sel-lab">Right type</span>
-      ${seg('type', (['patent', 'trade_mark', 'design'] as RightType[]).map((t) => ({ id: t, label: RIGHT_LABEL[t] })), 'patent')}
+      ${seg('type', (['patent', 'trade_mark', 'design'] as RightType[]).map((t) => ({ id: t, label: RIGHT_LABEL[t] })), 'patent', 'Choose a right type')}
     </div>
 
     ${card(

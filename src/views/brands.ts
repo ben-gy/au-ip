@@ -81,7 +81,7 @@ export function mount(el: HTMLElement, data: IpData): void {
     ${card(
       'Trade mark classes by volume and origin',
       `Largest class is ${biggest.c}. ${esc(biggest.label)} at ${num(biggest.n)}. Click any tile for its full history.`,
-      `<div class="ctl-row">${seg('kind', [{ id: 'all', label: 'All 45 classes' }, { id: 'goods', label: 'Goods (1–34)' }, { id: 'services', label: 'Services (35–45)' }], 'all')}</div>
+      `<div class="ctl-row">${seg('kind', [{ id: 'all', label: 'All 45 classes' }, { id: 'goods', label: 'Goods (1–34)' }, { id: 'services', label: 'Services (35–45)' }], 'all', 'Filter Nice classes')}</div>
        <div data-tree>${treemap(rows, 'all')}</div>
        ${legend([
         { color: ORIGIN_COLOR.domestic, label: 'Australian applicant (the filled block)' },
@@ -153,13 +153,9 @@ export function mount(el: HTMLElement, data: IpData): void {
         },
       },
     ],
-  });
-  tableHost.querySelectorAll('tr[data-row]').forEach((tr) => {
-    const open = () => {
-      const r = rows.find((x) => x.c === Number((tr as HTMLElement).dataset.row));
+    onRowActivate: (k) => {
+      const r = rows.find((x) => x.c === Number(k));
       if (r) detail(r);
-    };
-    tr.addEventListener('click', open);
-    tr.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') open(); });
+    },
   });
 }

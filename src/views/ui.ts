@@ -57,9 +57,13 @@ export function legend(items: { color: string; label: string; tip?: string }[]):
 }
 
 /** Segmented control. Returns markup; wire clicks with `onSeg`. */
-export function seg(name: string, options: { id: string; label: string }[], active: string): string {
-  return `<div class="seg" role="tablist" data-seg="${esc(name)}">${options.map((o) => `
-    <button type="button" role="tab" aria-selected="${o.id === active}" data-val="${esc(o.id)}" class="${o.id === active ? 'active' : ''}">${o.label}</button>`).join('')}</div>`;
+export function seg(name: string, options: { id: string; label: string }[], active: string, label?: string): string {
+  // role="group" with aria-pressed, NOT role="tablist"/"tab". These filter the
+  // view in place; they do not switch between tabpanels, and claiming the tab
+  // pattern promises a screen reader an aria-controls target and arrow-key
+  // navigation that do not exist.
+  return `<div class="seg" role="group" aria-label="${esc(label ?? name)}" data-seg="${esc(name)}">${options.map((o) => `
+    <button type="button" aria-pressed="${o.id === active}" data-val="${esc(o.id)}" class="${o.id === active ? 'active' : ''}">${o.label}</button>`).join('')}</div>`;
 }
 
 export function onSeg(root: HTMLElement, name: string, cb: (val: string) => void): void {
@@ -70,7 +74,7 @@ export function onSeg(root: HTMLElement, name: string, cb: (val: string) => void
     wrap.querySelectorAll('button').forEach((x) => {
       const on = x === b;
       x.classList.toggle('active', on);
-      x.setAttribute('aria-selected', String(on));
+      x.setAttribute('aria-pressed', String(on));
     });
     cb(b.dataset.val);
   });
@@ -134,6 +138,8 @@ export interface TableOpts<T> {
   rowKey?: (row: T) => string;
   clickable?: boolean;
   empty?: string;
+  /** Called when a row is clicked or activated by keyboard. Rebound on every sort. */
+  onRowActivate?: (key: string) => void;
 }
 
 /**
@@ -145,10 +151,18 @@ export function sortableTable<T>(host: HTMLElement, opts: TableOpts<T>): (rows: 
   let desc = opts.desc ?? true;
   let rows = opts.rows;
 
+  // The sort control is a real <button> inside the <th>, not a click handler on
+  // the <th> itself: a bare th is not focusable, so click-only sorting is
+  // unreachable from the keyboard. aria-sort stays on the th, which is what
+  // carries the implicit columnheader role it belongs to.
   const head = () => `<tr>${opts.columns.map((c) => {
     const sortable = !!c.sort;
     const isSorted = sortable && c.key === sortKey;
-    return `<th class="${c.num ? 'num ' : ''}${sortable ? 'sortable' : ''}" data-col="${esc(c.key)}"${isSorted ? ` aria-sort="${desc ? 'descending' : 'ascending'}"` : ''} scope="col">${c.label}${isSorted ? (desc ? ' ▾' : ' ▴') : ''}</th>`;
+    const arrow = isSorted ? (desc ? ' ▾' : ' ▴') : '';
+    const inner = sortable
+      ? `<button type="button" class="th-sort" data-col="${esc(c.key)}">${c.label}${arrow}</button>`
+      : c.label;
+    return `<th class="${c.num ? 'num ' : ''}${sortable ? 'sortable' : ''}"${isSorted ? ` aria-sort="${desc ? 'descending' : 'ascending'}"` : ''} scope="col">${inner}</th>`;
   }).join('')}</tr>`;
 
   const body = () => {
@@ -171,12 +185,24 @@ export function sortableTable<T>(host: HTMLElement, opts: TableOpts<T>): (rows: 
 
   const paint = () => {
     host.innerHTML = `<div class="tbl-wrap"><table class="data"><thead>${head()}</thead><tbody>${body()}</tbody></table></div>`;
-    host.querySelectorAll('th.sortable').forEach((th) => th.addEventListener('click', () => {
-      const k = (th as HTMLElement).dataset.col!;
+    host.querySelectorAll('.th-sort').forEach((btn) => btn.addEventListener('click', () => {
+      const k = (btn as HTMLElement).dataset.col!;
       if (k === sortKey) desc = !desc;
       else { sortKey = k; desc = true; }
       paint();
     }));
+    // Row activation is bound HERE, inside paint(), because every sort rebuilds
+    // the tbody. Binding it once from the caller left every row dead the moment
+    // the reader sorted a column.
+    if (opts.onRowActivate) {
+      host.querySelectorAll<HTMLElement>('tr[data-row]').forEach((tr) => {
+        const go = () => opts.onRowActivate!(tr.dataset.row!);
+        tr.addEventListener('click', go);
+        tr.addEventListener('keydown', (e) => {
+          if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') { e.preventDefault(); go(); }
+        });
+      });
+    }
   };
 
   paint();

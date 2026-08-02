@@ -70,7 +70,7 @@ function multiple(type: RightType, rows: SeriesRow[], lastReliable: number, cov:
   const hover = data.map((r) => {
     const w = iw / Math.max(1, data.length - 1);
     const share = r[1] + r[2] > 0 ? pct(r[1], r[1] + r[2]) : '—';
-    const flag = r[0] > lastReliable ? '\nProvisional: foreign filings for this year are still arriving.' : '';
+    const flag = r[0] > lastReliable ? '\nProvisional: this year is not settled — foreign filings are still arriving via the PCT national phase, and Australian provisionals are counted the moment they are lodged.' : '';
     const tip = `${r[0]} — ${RIGHT_LABEL[type]}\nAustralian applicants: ${num(r[1])}\nForeign applicants: ${num(r[2])}\nAustralian share: ${share}${r[3] ? `\nOrigin not recorded: ${num(r[3])}` : ''}${flag}`;
     return `<rect class="mark" x="${(x(r[0]) - w / 2).toFixed(1)}" y="${M.t}" width="${w.toFixed(1)}" height="${ih}" fill="transparent" data-tip="${tipAttr(tip)}"/>`;
   }).join('');
@@ -127,7 +127,7 @@ export function mount(el: HTMLElement, data: IpData): void {
     ${viewHead({
       title: 'The Divergence',
       question: 'Is Australia inventing less than it used to — or does it just look that way?',
-      blurb: `Less, and it is not an illusion of share. Australian-origin patent filings have fallen in <em>absolute</em> numbers since the mid-1990s while foreign filings into Australia have roughly doubled. Trade marks did the opposite. Australian applicants rise above each centre line, foreign applicants fall below it.`,
+      blurb: `Less, and it is not an illusion of share. Australian-origin patent filings have fallen in <em>absolute</em> numbers since the mid-1990s while foreign filings into Australia more than doubled. Trade marks did the opposite: both sides grew, and the Australian side stayed the larger of the two. Australian applicants rise above each centre line, foreign applicants fall below it.`,
     })}
 
     ${a && b ? statRow([
@@ -151,7 +151,7 @@ export function mount(el: HTMLElement, data: IpData): void {
     )}
 
     <div class="note-band">
-      <strong>Why the last few years are shaded.</strong> Foreign applicants mostly reach Australia through the ${gloss('pct')}, up to about 30 months after their priority date, while Australian ${gloss('provisional', 'provisional applications')} appear immediately. In this extract the Australian share of patent filings reads ${shareB} for ${lr} but ${pct(at(2025)?.[1] ?? 0, (at(2025)?.[1] ?? 0) + (at(2025)?.[2] ?? 1), 1)} for 2025 and ${pct(at(2026)?.[1] ?? 0, (at(2026)?.[1] ?? 0) + (at(2026)?.[2] ?? 1), 1)} for 2026 — a rise that is entirely an artefact of filings that have not arrived yet. Every share figure quoted on this site therefore stops at ${lr}.
+      <strong>Why the last few years are shaded.</strong> Foreign applicants mostly reach Australia through the ${gloss('pct')}, up to about 30 months after their priority date, while Australian ${gloss('provisional', 'provisional applications')} appear immediately. In this extract the Australian share of patent filings reads ${shareB} for ${lr} but ${pct(at(2025)?.[1] ?? 0, (at(2025)?.[1] ?? 0) + (at(2025)?.[2] ?? 1), 1)} for 2025 and ${pct(at(2026)?.[1] ?? 0, (at(2026)?.[1] ?? 0) + (at(2026)?.[2] ?? 1), 1)} for 2026 — a rise driven from both sides at once: foreign filings for those years are still arriving, while Australian provisional filings — which are lodged and counted immediately — jumped over the same period. Neither year is a settled number, so every share figure quoted on this site stops at ${lr}.
     </div>
 
     ${card(

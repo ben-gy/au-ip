@@ -42,14 +42,16 @@ function heatmap(fields: TechField[], decades: number[], mode: 'all' | 'au'): st
       const tip = `${f.label} — ${decades[ci]}s\n${num(v)} ${mode === 'au' ? 'Australian-origin ' : ''}patent applications\n${pct(v, rowMax, 0)} of this field's busiest decade`;
       return `<rect class="mark" x="${x}" y="${y}" width="${cellW - 2}" height="${cellH - 2}" rx="2" fill="${linearRamp(v, rowMax)}" data-tip="${tipAttr(tip)}"/>`;
     }).join('');
-    const total = mode === 'au' ? f.au : f.n;
+    // The row's own decades, not the field's all-time total: the heatmap starts
+    // at 1980, so an all-time total sits ~20% above the row it labels.
+    const total = vals.reduce((a, b) => a + b, 0);
     return `${label}${boxes}<text class="ax-txt" x="${labW + decades.length * cellW + 6}" y="${y + cellH / 2 + 3}" font-family="var(--font-mono)">${compact(total)}</text>`;
   }).join('');
 
   const heads = decades.map((d, i) => `<text class="ax-txt" x="${labW + i * cellW + (cellW - 2) / 2}" y="22" text-anchor="middle" font-weight="600">${d}s</text>`).join('');
 
   return `<div class="chart chart-xwide zoomable">${svgOpen(W, H, 'Patent applications by technology field and decade')}
-    ${heads}<text class="ax-txt" x="${labW + decades.length * cellW + 6}" y="22" font-weight="600">Total</text>
+    ${heads}<text class="ax-txt" x="${labW + decades.length * cellW + 6}" y="22" font-weight="600">1980–</text>
     ${cells}
   </svg></div>`;
 }
@@ -93,16 +95,19 @@ export function mount(el: HTMLElement, data: IpData): void {
   const under = sorted[sorted.length - 1];
   const topAll = [...fields].sort((a, b) => b.n - a.n)[0];
   const topAu = [...fields].sort((a, b) => b.au - a.au)[0];
+  // rank 99 is the "unclassified" residual, not a WIPO field — counting it
+  // makes the page say 35 fields in one sentence and 36 in the next.
+  const realFields = fields.filter((f) => f.rank <= 35).length;
 
   el.innerHTML = `
     ${viewHead({
       title: 'Technology',
       question: 'What gets patented in Australia — and is it the same as what Australians patent?',
-      blurb: `No. Patenting <em>in</em> Australia is dominated by ${esc(topAll.label.toLowerCase())}; patenting <em>by</em> Australians leans towards ${esc(over.label.toLowerCase())}. Every patent is placed in one of the ${gloss('wipo35', '35 WIPO technology fields')} by its ${gloss('ipc', 'examiner-assigned classification')}.`,
+      blurb: `No. Patenting <em>in</em> Australia is dominated by ${esc(topAll.label.toLowerCase())}; patenting <em>by</em> Australians leans towards ${esc(over.label.toLowerCase())}. Every patent is placed in one or more of the ${gloss('wipo35', '35 WIPO technology fields')} by its ${gloss('ipc', 'examiner-assigned classification')}.`,
     })}
 
     ${statRow([
-      { value: compact(totalAll), label: 'Classified patent applications', sub: `across ${fields.length} technology fields` },
+      { value: compact(totalAll), label: 'Field classifications', sub: `across ${realFields} WIPO fields — one patent can sit in several`, tip: 'A patent is placed in every technology field its examiner-assigned classifications map to, so these total more than the number of patents.' },
       { value: esc(topAll.label), label: 'Largest field overall', sub: `${pct(topAll.n, totalAll, 1)} of all patenting here` },
       { value: esc(topAu.label), label: 'Largest field for Australians', sub: `${pct(topAu.au, totalAu, 1)} of Australian-origin patenting` },
       { value: signed(over.spec), label: `Most over-indexed: ${esc(over.label)}`, tone: 'dom', sub: 'percentage points above the local baseline' },
@@ -118,7 +123,7 @@ export function mount(el: HTMLElement, data: IpData): void {
     ${card(
       'Technology field by decade',
       'Each row is scaled against its own busiest decade, so a small field is still legible next to a huge one — hover for the raw counts. Drag to pan, scroll to zoom.',
-      `<div class="ctl-row">${seg('mode', [{ id: 'all', label: 'All patents filed here' }, { id: 'au', label: 'Australian applicants only' }], 'all')}</div>
+      `<div class="ctl-row">${seg('mode', [{ id: 'all', label: 'All patents filed here' }, { id: 'au', label: 'Australian applicants only' }], 'all', 'Choose which patents to show')}</div>
        <div data-heat>${heatmap(fields, decades, 'all')}</div>
        ${legend([
         { color: RAMP_SWATCHES[1], label: 'quiet decade for this field', tip: 'Shading is relative to the row, not to other rows — compare across a row, never down a column.' },

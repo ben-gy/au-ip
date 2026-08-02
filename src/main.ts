@@ -75,7 +75,8 @@ function aboutHtml(): string {
       <li><strong>Filer groups merge name variants.</strong> Names are stored lowercased with punctuation stripped, so one company arrives under several spellings. Legal forms and at most one trailing geographic word are stripped before grouping. Every merge is shown in the filer's detail panel so you can judge it.</li>
       <li><strong>${num(t.noFilingDate)} applications carry no usable filing date</strong> and are excluded from every time series rather than dated by guesswork.</li>
       <li><strong>Pseudonymised parties are set aside, not ranked.</strong> ${num(t.redactedApplicants)} applicant records and ${num(t.redactedAgents)} agent records arrive as a hex token instead of a name, standing in for parties IP Australia has redacted. Three of them are individually large enough to outrank every real attorney firm but the top five, so they are excluded from all leaderboards and counted here instead.</li>
-      <li><strong>2026 is a part-year.</strong> Foreign postcodes in the address field are discarded rather than plotted onto Australian maps.</li>
+      <li><strong>${data.core.sourceDate.slice(0, 4)} is a part-year.</strong> The extract runs to ${isoDate(data.core.sourceDate)}, so the final year on every chart is short by construction.</li>
+      <li><strong>Foreign postcodes are discarded.</strong> The postcode field also holds foreign postcodes — a Japanese applicant's 4488671, DuPont's 19898 — so postcodes are only read when the applicant's country is recorded as Australia.</li>
     </ul>
 
     <h3>Glossary</h3>

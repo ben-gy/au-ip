@@ -17,6 +17,7 @@
 //     seekable, so a member is always inflated from its own data start.
 
 import zlib from 'node:zlib';
+import { StringDecoder } from 'node:string_decoder';
 import { Readable } from 'node:stream';
 
 const SIG_EOCD = 0x06054b50;
@@ -152,10 +153,15 @@ export async function streamMemberLines(url, entry, onLine) {
     throw new Error(`member ${entry.name}: unsupported compression method ${entry.method}`);
   }
 
+  // A StringDecoder, not chunk.toString(): inflate chunk boundaries fall in
+  // arbitrary places, and toString() carries no state between calls, so any
+  // multi-byte character straddling a boundary becomes two replacement
+  // characters. Applicant names are full of them.
+  const dec = new StringDecoder('utf8');
   let tail = '';
   let lines = 0;
   for await (const chunk of out) {
-    const text = tail + chunk.toString('utf8');
+    const text = tail + dec.write(chunk);
     let start = 0;
     let nl = text.indexOf('\n', start);
     while (nl !== -1) {
@@ -167,6 +173,7 @@ export async function streamMemberLines(url, entry, onLine) {
     }
     tail = text.slice(start);
   }
+  tail += dec.end();
   if (tail.length) {
     const line = tail.endsWith('\r') ? tail.slice(0, -1) : tail;
     if (line.length) { onLine(line); lines++; }
