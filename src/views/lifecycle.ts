@@ -47,7 +47,10 @@ function lagChart(data: IpData, type: RightType): string {
 
   const xt = buckets.map((b, i) => `<text class="ax-txt" x="${x(i).toFixed(1)}" y="${H - 22}" text-anchor="middle">${b === 0 ? '0' : b >= 365 ? `${(b / 365).toFixed(b % 365 ? 1 : 0)}y` : `${b}d`}</text>`).join('');
 
-  const lines = entry.rows.map((r) => {
+  // Every cohort's curve converges on 100%, so end-of-line labels all land on
+  // the same y and print on top of each other. They are stacked by index
+  // instead, which also gives them a legible reading order.
+  const lines = entry.rows.map((r, li) => {
     const total = r.v.reduce((s, v) => s + v, 0) || 1;
     let cum = 0;
     const pts: [number, number][] = r.v.map((v, i) => {
@@ -62,8 +65,10 @@ function lagChart(data: IpData, type: RightType): string {
       return `<circle class="mark" cx="${x(i).toFixed(1)}" cy="${y((c / total) * 100).toFixed(1)}" r="7" fill="transparent" data-tip="${tipAttr(tip)}"/>`;
     }).join('');
     const last = pts[pts.length - 1];
+    const ly = M.t + 12 + li * 15;
     return `<path d="${pathFrom(pts)}" fill="none" stroke="${colour}" stroke-width="2.2"/>
-      <text class="ax-txt" x="${(last[0] + 8).toFixed(1)}" y="${(last[1] + 3).toFixed(1)}" fill="${colour}" font-weight="600">${r.decade}s</text>${dots}`;
+      <line x1="${(last[0] + 4).toFixed(1)}" y1="${last[1].toFixed(1)}" x2="${(last[0] + 12).toFixed(1)}" y2="${ly}" stroke="${colour}" stroke-width="1" opacity="0.5"/>
+      <text class="ax-txt" x="${(last[0] + 15).toFixed(1)}" y="${ly + 3}" fill="${colour}" font-weight="600">${r.decade}s</text>${dots}`;
   }).join('');
 
   return `<div class="chart chart-wide">${svgOpen(W, H, `Time from filing to registration, ${RIGHT_LABEL[type]}`)}
@@ -94,13 +99,17 @@ function survivalChart(data: IpData, type: RightType): string {
   const xt = [];
   for (let n = 5; n <= 20; n += 5) xt.push(`<text class="ax-txt" x="${x(n).toFixed(1)}" y="${H - 22}" text-anchor="middle">${n}y</text>`);
 
-  const lines = entry.cohorts.map((c) => {
+  const lines = entry.cohorts.map((c, li) => {
     const pts: [number, number][] = c.pts.map((p, i) => [x(i + 1), y(p)]);
     const colour = ['#c7d2fe', '#818cf8', '#4f46e5', '#3730a3'][Math.max(0, Math.min(3, (c.decade - 1980) / 10))];
     const dots = c.pts.map((p, i) => `<circle class="mark" cx="${x(i + 1).toFixed(1)}" cy="${y(p).toFixed(1)}" r="7" fill="transparent" data-tip="${tipAttr(`${c.decade}s ${RIGHT_LABEL[type].toLowerCase()}\n${p.toFixed(1)}% still in force ${i + 1} year${i ? 's' : ''} after taking effect\ncohort of ${num(c.size)}`)}"/>`).join('');
     const last = pts[pts.length - 1];
+    // Curves end at different x here (each cohort stops where its observation
+    // does), so the label sits at the line end but is nudged apart vertically
+    // when two cohorts happen to finish close together.
+    const ly = Math.max(M.t + 10, Math.min(M.t + ih - 4, last[1] + (li % 2 === 0 ? -8 : 10)));
     return `<path d="${pathFrom(pts)}" fill="none" stroke="${colour}" stroke-width="2.2"/>
-      <text class="ax-txt" x="${(last[0] + 8).toFixed(1)}" y="${(last[1] + 3).toFixed(1)}" fill="${colour}" font-weight="600">${c.decade}s</text>${dots}`;
+      <text class="ax-txt" x="${(last[0] + 7).toFixed(1)}" y="${ly + 3}" fill="${colour}" font-weight="600">${c.decade}s</text>${dots}`;
   }).join('');
 
   return `<div class="chart chart-wide">${svgOpen(W, H, `Share of ${RIGHT_LABEL[type]} still in force over time`)}
